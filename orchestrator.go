@@ -3,40 +3,41 @@ package main
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"os/exec"
 	"syscall"
-	"net/http"
 
-	"github.com/containerd/nerdctl/pkg/imgutil/commit"
+	"log"
+	"path/filepath"
+	"strings"
+
+	"github.com/BenjaminChun/ssh-test/networking"
+	"github.com/BenjaminChun/ssh-test/snapshotting"
 	"github.com/containerd/containerd"
 	"github.com/containerd/containerd/cio"
 	"github.com/containerd/containerd/leases"
+	"github.com/containerd/containerd/mount"
 	"github.com/containerd/containerd/namespaces"
 	"github.com/containerd/containerd/oci"
-	"github.com/containerd/containerd/snapshots"
-	"github.com/containerd/containerd/mount"
 	"github.com/containerd/containerd/remotes/docker"
 	"github.com/containerd/containerd/remotes/docker/config"
+	"github.com/containerd/containerd/snapshots"
+	"github.com/containerd/nerdctl/pkg/imgutil/commit"
 	fcclient "github.com/firecracker-microvm/firecracker-containerd/firecracker-control/client"
 	"github.com/firecracker-microvm/firecracker-containerd/proto"
 	"github.com/firecracker-microvm/firecracker-containerd/runtime/firecrackeroci"
 	"github.com/opencontainers/image-spec/identity"
 	"github.com/pkg/errors"
-	"github.com/vhive-serverless/remote-firecracker-snapshots-poc/networking"
-	"github.com/vhive-serverless/remote-firecracker-snapshots-poc/snapshotting"
-	"log"
-	"path/filepath"
-	"strings"
 )
 
 type VMInfo struct {
-	imgName    string
-	ctrSnapKey string
-	ctrSnapCommitName string
-	snapBooted        bool
-	containerSnapMount          *mount.Mount
-	ctr                   containerd.Container
-	task                        containerd.Task
+	imgName            string
+	ctrSnapKey         string
+	ctrSnapCommitName  string
+	snapBooted         bool
+	containerSnapMount *mount.Mount
+	ctr                containerd.Container
+	task               containerd.Task
 }
 
 type Orchestrator struct {
@@ -263,7 +264,7 @@ func (orch *Orchestrator) commitCtrSnap(vmID, snapCommitName string) error {
 
 	log.Println("Pushing container snapshot patch")
 	options := docker.ResolverOptions{
-		Hosts: config.ConfigureHosts(orch.ctx, config.HostOptions{DefaultScheme: "http"}),
+		Hosts:  config.ConfigureHosts(orch.ctx, config.HostOptions{DefaultScheme: "http"}),
 		Client: http.DefaultClient,
 	}
 	err = orch.client.Push(orch.ctx, fmt.Sprintf("pc69.cloudlab.umass.edu:5000/%s:latest", snapCommitName),
@@ -279,7 +280,7 @@ func (orch *Orchestrator) commitCtrSnap(vmID, snapCommitName string) error {
 func (orch *Orchestrator) pullCtrSnapCommit(snapCommitName string) (*containerd.Image, error) {
 	log.Println("Pulling container snapshot patch")
 	options := docker.ResolverOptions{
-		Hosts: config.ConfigureHosts(orch.ctx, config.HostOptions{DefaultScheme: "http"}),
+		Hosts:  config.ConfigureHosts(orch.ctx, config.HostOptions{DefaultScheme: "http"}),
 		Client: http.DefaultClient,
 	}
 	img, err := orch.client.Pull(orch.ctx, fmt.Sprintf("pc69.cloudlab.umass.edu:5000/%s:latest", snapCommitName),
@@ -413,10 +414,10 @@ func (orch *Orchestrator) bootVMFromSnapshot(vmID, revision string) error {
 				},
 			},
 		}},
-		NetNS:          orch.networkManager.GetConfig(vmID).GetNamespacePath(),
-		LoadSnapshot:   true,
-		MemFilePath:    filepath.Join(orch.snapshotManager.BasePath, revision, "memfile"),
-		SnapshotPath:   filepath.Join(orch.snapshotManager.BasePath, revision, "snapfile"),
+		NetNS:                 orch.networkManager.GetConfig(vmID).GetNamespacePath(),
+		LoadSnapshot:          true,
+		MemFilePath:           filepath.Join(orch.snapshotManager.BasePath, revision, "memfile"),
+		SnapshotPath:          filepath.Join(orch.snapshotManager.BasePath, revision, "snapfile"),
 		ContainerSnapshotPath: ctrSnapMount.Source,
 	}
 

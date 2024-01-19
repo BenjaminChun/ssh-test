@@ -1,6 +1,6 @@
-module github.com/vhive-serverless/remote-firecracker-snapshots-poc
+module github.com/BenjaminChun/ssh-test
 
-go 1.19
+go 1.18
 
 // Pin gPRC-related dependencies as like containerd v1.6.20
 replace (
